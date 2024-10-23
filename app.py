@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 # Configuration and constants
 app.secret_key = 'Cam_on_Thay_Hien_Phan'  # Secret key for session management
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://user_name:password2@localhost:5432/dbo'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:password2@localhost:localhost/database'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize SQLAlchemy
