@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kết Quả Tìm Kiếm Bằng Hình Ảnh</title>
+    <link rel="stylesheet" href="/static/next_page.css">
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="/static/product.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <!-- Include Header -->
+    {% include 'header.html' %}
+
+    <!-- Searched Image -->
+    <section class="searched-image-section">
+        <h2>Ảnh Đã Tìm Kiếm</h2>
+        <div class="product-grid">
+            <div class="product-card">
+                <div class="product-image">
+                    <img src="{{ url_for('static', filename='uploads/' + uploaded_image_filename) }}" alt="Searched Image" style="max-width: 260px; height: auto;">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Similar Products Section -->
+    <section class="similar-products-section">
+        <h2>Sản Phẩm Tương Tự</h2>
+        <div class="product-grid" id="product-grid">
+            {% for product, tracking in similar_products %}
+                {% include 'product.html' %}
+            {% endfor %}
+        </div>
+    </section>    
+    <!-- External JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

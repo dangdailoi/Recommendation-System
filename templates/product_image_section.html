@@ -1,0 +1,36 @@
+<div class="left-section">
+    <div class="product-image-main">
+        {% if product.product_images %}
+            <img id="mainImage" src="{{ product.product_images[0] }}" alt="{{ product.product_name }}">
+        {% else %}
+            <img id="mainImage" src="/static/default.jpg" alt="No Image Available">
+        {% endif %}
+    </div>
+
+    <!-- Thumbnail Slider -->
+    <div class="thumbnail-slider">
+        {% if product.product_images %}
+            {% for img_url in product.product_images %}
+            <div class="thumbnail-item">
+                <img src="{{ img_url }}" alt="{{ product.product_name }}" onclick="changeMainImage(this)">
+            </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <!-- Đặc điểm nổi bật (Highlights) -->
+    {% if highlight %}
+    <div class="highlights">
+        <h3>Đặc điểm nổi bật</h3>
+        <ul class="highlight-list">
+            {% for item in highlight %}
+            <li>
+                <span class="icon-checkmark">
+                    <img width="16" height="16" src="https://salt.tikicdn.com/ts/upload/81/61/d4/92e63f173e7983b86492be159fe0cff4.png" alt="blue-check">
+                </span> {{ item.strip() }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>

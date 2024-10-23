@@ -1,0 +1,152 @@
+<header class="header">
+    <div class="logo-container">
+        <img src="https://www.ueh.edu.vn/images/logo-header.png" alt="Logo" class="logo">
+    </div>
+
+    <div class="header-left">
+        <!-- Home Icon -->
+        <a href="/home" class="home-icon">
+            <i class="fas fa-home"></i>
+        </a>
+
+        <!-- Search Bar -->
+        <form action="/search-by-text" method="GET" class="search-bar">
+            <input type="text" name="query" placeholder="Tìm kiếm sản phẩm..." class="search-input">
+            <button type="button" class="image-search-button">
+                <img src="https://www.charlottedavies.com/wp-content/uploads/2022/09/google-lens-logo.png" alt="Search by Image" class="image-search-icon">
+            </button>
+            <button type="submit" class="search-button">
+                <i class="fa fa-search"></i>
+            </button>
+        </form>
+    </div>
+
+    <!-- Image Search Dialog -->
+    <div id="image-search-dialog" class="image-search-dialog" style="display: none;">
+        <div class="image-search-content">
+            <span class="close">&times;</span>
+            <h2>Search by Image</h2>
+            <div class="image-search-options">
+                <!-- Upload Area -->
+                <div class="upload-area" id="upload-area">
+                    <p><a href="#" id="upload-file-link">Upload a file</a></p>
+                    <input type="file" id="file-upload" accept="image/*" style="display:none;">
+                </div>
+                <div id="preview-container" class="preview-container" style="display: none;">
+                    <img id="image-preview" src="" alt="Image Preview" class="fixed-size-image">
+                </div>
+                <button id="search-image">Search</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cart Icon -->
+    <div class="cart-icon">
+        <a href="/cart">
+            <i class="fas fa-shopping-cart"></i>
+            <span class="cart-count">{{ cart_count }}</span>
+        </a>
+    </div>
+</header>
+
+<!-- Search History -->
+<div class="search-history">
+    {% for term in search_history %}
+        <a href="/search-by-text?query={{ term }}" class="keyword">{{ term }}</a>
+    {% endfor %}
+</div>
+
+<script>
+document.querySelector('.image-search-button').addEventListener('click', function() {
+    document.getElementById('image-search-dialog').style.display = 'block';
+});
+
+document.querySelector('.close').addEventListener('click', function() {
+    document.getElementById('image-search-dialog').style.display = 'none';
+});
+
+document.getElementById('upload-file-link').addEventListener('click', function(e) {
+    e.preventDefault();
+    document.getElementById('file-upload').click();
+});
+
+document.getElementById('file-upload').addEventListener('change', function() {
+    const file = this.files[0];
+
+    if (file) {
+        const reader = new FileReader();
+        
+        // When the file is loaded, display the preview
+        reader.onload = function(e) {
+            const previewContainer = document.getElementById('preview-container');
+            const imagePreview = document.getElementById('image-preview');
+            imagePreview.src = e.target.result;
+            previewContainer.style.display = 'block';
+            
+            // Hide the upload area after an image is selected
+            document.getElementById('upload-area').style.display = 'none';
+        };
+
+        reader.readAsDataURL(file);
+    }
+});
+
+document.getElementById('search-image').addEventListener('click', function() {
+    const fileInput = document.getElementById('file-upload');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please upload an image file.');
+        return;
+    }
+
+    // Create a FormData object to handle the file upload
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Send the image file to the backend
+    fetch('/search-by-image', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(html => {
+        document.body.innerHTML = html;  // Replace the current page with the search results
+    })
+    .catch(error => console.error('Error:', error));
+});
+</script>
+
+<style>
+/* Image Preview Styling */
+.fixed-size-image {
+    height: 260px;  /* Fixed height */
+    object-fit: contain;  /* Maintain aspect ratio */
+    width: auto;  /* Automatically adjust the width */
+}
+
+.upload-area {
+    /* Add any styles for the upload area */
+    text-align: center;
+    padding: 10px;
+    border: 2px dashed #ccc;
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+
+.upload-area p {
+    color: #5b4aeb;
+    font-weight: bold;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.preview-container {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.image-search-dialog {
+    max-width: 400px;
+}
+</style>

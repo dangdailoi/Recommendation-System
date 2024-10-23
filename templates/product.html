@@ -1,0 +1,73 @@
+<div class="product-card">
+    <!-- Product Image -->
+    <div class="product-image" onclick="window.location.href='{{ url_for('view_product', product_id=product.product_id) }}'">
+        <img src="{{ product.product_images[0] if product.product_images and product.product_images|length > 0 else '/static/default.jpg' }}" alt="{{ product.product_name }}">
+        <!-- Discount Label -->
+        {% if tracking.discount > 0 %}
+            <span class="discount-label">Giảm {{ "{:.0f}".format((tracking.discount)) }}%</span>
+        {% endif %}
+    </div>
+
+    <!-- Product Information -->
+    <div class="product-info">
+        <h3 onclick="window.location.href='{{ url_for('view_product', product_id=product.product_id) }}'">
+            {{ product.product_name }}
+        </h3>
+        <p class="price" onclick="window.location.href='{{ url_for('view_product', product_id=product.product_id) }}'">
+            {{ "{:,.0f}".format(product.product_price*(100-tracking.discount)/100).replace(',', '.') }} VND
+        </p>
+        <div class="product-rating">
+            <p class="rating" data-review-count="{{ tracking.review_count }}">
+                {{ tracking.rating_average }} (<span class="formatted-review-count"></span> reviews)
+            </p>
+            <p class="sold-count" data-quantity-sold="{{ tracking.quantity_sold }}">
+                Đã bán <span class="formatted-quantity-sold"></span>
+            </p>
+        </div>
+        <!-- Add to Cart Button -->
+        <form class="add-to-cart-form" data-product-id="{{ product.product_id }}" method="POST">
+            <button type="button" class="add-to-cart-btn">Thêm vào giỏ hàng</button>
+        </form>
+    </div>
+
+    <!-- Favourite Button -->
+    <span class="favourite-btn" data-product-id="{{ product.product_id }}" data-is-favourite="{{ 'true' if is_favourite else 'false' }}" onclick="toggleFavourite(this)">
+        <i class="{{ 'fas fa-heart favourited' if is_favourite else 'far fa-heart' }}"></i>
+    </span>
+    <!-- "Sản phẩm tương tự" button -->
+    <a href="{{ url_for('content_based_recommendations', product_id=product.product_id) }}" class="similar-btn">Sản phẩm tương tự</a>
+</div>
+
+<script>
+    function toggleFavourite(element) {
+        const productId = element.getAttribute('data-product-id');
+        const isFavourite = element.getAttribute('data-is-favourite') === 'true';
+        const activityType = isFavourite ? 'unfavourite' : 'favourite';
+    
+        fetch('/favourite', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ product_id: productId, activity_type: activityType })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Toggle the heart icon
+                const icon = element.querySelector('i');
+                if (isFavourite) {
+                    icon.classList.remove('fas', 'favourited');
+                    icon.classList.add('far');
+                    element.setAttribute('data-is-favourite', 'false');
+                } else {
+                    icon.classList.remove('far');
+                    icon.classList.add('fas', 'favourited');
+                    element.setAttribute('data-is-favourite', 'true');
+                }
+            } else {
+                alert(data.error || 'An error occurred.');
+            }
+        });
+    }
+</script>    

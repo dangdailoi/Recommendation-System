@@ -1,0 +1,8 @@
+{
+    "vgg16_weights": "model/Image/vgg16.h5",
+    "images_vector": "model/Image/images.npy",
+    "fashion": "model/Content-based/fashion.npy",
+    "book": "model/Content-based/book.npy",
+    "MODEL_PATH": "model/Reference-Learning/dqn_model.h5",
+    "CSV_FILE_PATH": "model/Reference-Learning/user_activity.csv"
+}

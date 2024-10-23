@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sản Phẩm Tương Tự</title>
+    <link rel="stylesheet" href="/static/next_page.css">
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="/static/product.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- Link FontAwesome -->
+</head>   
+<body>
+    <!-- Include Header -->
+    {% include 'header.html' %}
+
+    <!-- Sản phẩm gốc -->
+    <section class="product-section">
+        <h2>Sản Phẩm Gốc</h2>
+        <div class="product-grid">
+            <div class="product-card">
+                <a href="{{ url_for('view_product', product_id=selected_product.product_id) }}" class="product-link"> <!-- Product link wrapper -->
+                    <div class="product-image">
+                        <img src="{{ selected_product.product_images[0] if selected_product.product_images and selected_product.product_images|length > 0 else '/static/default.jpg' }}" alt="{{ selected_product.product_name }}">
+                        {% if selected_product.tracking.discount > 0 %}
+                            <span class="discount-label">Giảm {{ "{:.0f}".format((selected_product.tracking.discount)) }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-info">
+                        <h3>{{ selected_product.product_name }}</h3>
+                        <p class="price">{{ "{:,.0f}".format(selected_product.product_price*(100-selected_product.tracking.discount)/100).replace(',', '.') }} VND</p>
+                        <div class="product-rating">
+                            <p class="rating" data-review-count="{{ selected_product.tracking.review_count }}">
+                                {{ selected_product.tracking.rating_average }} (<span class="formatted-review-count"></span> reviews)
+                            </p>
+                            <p class="sold-count" data-quantity-sold="{{ selected_product.tracking.quantity_sold }}">
+                                Đã bán <span class="formatted-quantity-sold"></span>
+                            </p>
+                        </div>
+                        <form class="add-to-cart-form" data-product-id="{{ selected_product.product_id }}" method="POST">
+                            <button type="button" class="add-to-cart-btn">Thêm vào giỏ hàng</button>
+                        </form>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sản Phẩm Tương Tự -->
+    <section class="product-section">
+        <h2>Sản Phẩm Tương Tự</h2>
+        <div class="product-grid" id="product-grid">
+            {% for product, tracking in similar_products %}
+                {% include 'product.html' %}
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        <nav>
+            <ul class="pagination">
+                <!-- Previous Page -->
+                {% if current_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('content_based_recommendations', product_id=selected_product.product_id, page=current_page-1) }}">Trang trước</a>
+                </li>
+                {% endif %}
+
+                <!-- First Page and Ellipsis if needed -->
+                {% if start_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('content_based_recommendations', product_id=selected_product.product_id, page=1) }}">1</a>
+                </li>
+                {% if start_page > 2 %}
+                <li class="page-item"><span class="page-link">...</span></li>
+                {% endif %}
+                {% endif %}
+
+                <!-- Page Numbers -->
+                {% for page in range(start_page, end_page + 1) %}
+                <li class="page-item {{ 'active' if page == current_page else '' }}">
+                    <a class="page-link" href="{{ url_for('content_based_recommendations', product_id=selected_product.product_id, page=page) }}">{{ page }}</a>
+                </li>
+                {% endfor %}
+
+                <!-- Ellipsis and Last Page if needed -->
+                {% if end_page < total_pages %}
+                {% if end_page < total_pages - 1 %}
+                <li class="page-item"><span class="page-link">...</span></li>
+                {% endif %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('content_based_recommendations', product_id=selected_product.product_id, page=total_pages) }}">{{ total_pages }}</a>
+                </li>
+                {% endif %}
+
+                <!-- Next Page -->
+                {% if current_page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('content_based_recommendations', product_id=selected_product.product_id, page=current_page+1) }}">Trang tiếp theo</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </section>
+
+    <!-- External JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

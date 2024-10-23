@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kết Quả Tìm Kiếm</title>
+    <link rel="stylesheet" href="/static/next_page.css">
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- Link FontAwesome -->
+</head>   
+<body>
+    <!-- Include Header -->
+    {% include 'header.html' %}
+    <!-- Search Results -->
+    <section class="search-results">
+        <h2>Kết Quả Tìm Kiếm: "{{ query }}" 
+            <span class="icon-container">
+                <img width="24" height="24" src="https://cdn-icons-png.flaticon.com/512/1150/1150612.png" alt="search-icon">
+            </span>
+        </h2>
+        <div class="product-grid" id="product-grid">
+            {% for product in products %}
+            <div class="product-card">
+                <a href="{{ url_for('product', product_id=product['id']) }}" class="product-link">
+                    <div class="product-image">
+                        <img src="{{ product['images'].split(',')[0].replace('[', '').replace(']', '').replace("'", '').strip() }}" alt="{{ product['name'] }}">
+                        {% if product['discount'] > 0 %}
+                        <span class="discount-label">Giảm {{ "{:.0f}".format((product['discount'] / product['list_price']) * 100) }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-info">
+                        <h3>{{ product['name'] }}</h3>
+                        <p class="price">{{ "{:,.0f}".format(product['list_price'] - product['discount']).replace(',', '.') }} VND</p>
+                        <div class="product-rating">
+                            <p class="rating" data-review-count="{{ product['review_count'] }}">
+                                {{ product['average_rating'] }} (<span class="formatted-review-count">{{ product['review_count'] or '0' }}</span> reviews)
+                            </p>
+                            <p class="sold-count" data-quantity-sold="{{ product['quantity_sold'] }}">
+                                Đã bán <span class="formatted-quantity-sold">{{ product['quantity_sold'] or '0' }}</span>
+                            </p>
+                        </div>
+                        <form class="add-to-cart-form" data-product-id="{{ product['id'] }}" method="POST">
+                            <button type="button" class="add-to-cart-btn">Thêm vào giỏ hàng</button>
+                        </form>
+                    </div>
+                    <!-- "Sản phẩm tương tự" button -->
+                    <a href="{{ url_for('content_based', product_id=product['id']) }}" class="similar-btn">Sản phẩm tương tự</a>
+                </a>
+            </div>      
+            {% endfor %}
+        </div>
+
+        <!-- No Results Message -->
+        {% if products|length == 0 %}
+        <p>Không tìm thấy sản phẩm nào cho "{{ query }}".</p>
+        {% endif %}
+    </section>
+
+    <!-- Pagination (if needed) -->
+    <nav>
+        <ul class="pagination">
+            <!-- Trang trước -->
+            {% if current_page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('search', query=query, page=current_page-1) }}">Trang trước</a>
+            </li>
+            {% endif %}
+
+            <!-- Hiển thị 3 trang đầu tiên -->
+            {% if current_page > 3 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('search', query=query, page=1) }}">1</a>
+            </li>
+            <li class="page-item">
+                <span class="page-link">...</span>
+            </li>
+            {% endif %}
+
+            <!-- Hiển thị trang hiện tại và 2 trang kế tiếp/trước -->
+            {% for page in range(start_page, end_page + 1) %}
+            <li class="page-item {{ 'active' if page == current_page else '' }}">
+                <a class="page-link" href="{{ url_for('search', query=query, page=page) }}">{{ page }}</a>
+            </li>
+            {% endfor %}
+
+            <!-- Hiển thị trang cuối cùng -->
+            {% if current_page < total_pages - 2 %}
+            <li class="page-item">
+                <span class="page-link">...</span>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('search', query=query, page=total_pages) }}">{{ total_pages }}</a>
+            </li>
+            {% endif %}
+
+            <!-- Trang tiếp theo -->
+            {% if current_page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('search', query=query, page=current_page+1) }}">Trang tiếp theo</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <!-- External JavaScript -->
+    <script src="/static/script.js"></script>
+    <script>
+        const imageUploadInput = document.getElementById('image-upload');
+        const previewImage = document.getElementById('preview-image');
+
+        imageUploadInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImage.src = e.target.result;
+                    previewImage.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.addEventListener('paste', function(e) {
+            const items = e.clipboardData.items;
+            for (const item of items) {
+                if (item.type.indexOf("image") === 0) {
+                    const file = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        previewImage.src = event.target.result;
+                        previewImage.classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

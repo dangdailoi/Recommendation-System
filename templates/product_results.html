@@ -1,0 +1,137 @@
+<!DOCTYPE html> 
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <link rel="stylesheet" href="/static/next_page.css">
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- Link FontAwesome -->
+</head>   
+<body>
+    <!-- Include Header -->
+    {% include 'header.html' %}
+    
+    <!-- Display original product or searched image -->
+    <section class="top-rated-products">
+        <h2>Sản Phẩm Gốc</h2>
+        <!-- Sản Phẩm Gốc -->
+        <div class="product-card">
+            {% if selected_product %}
+                <a href="{{ url_for('product', product_id=selected_product['product_id']) }}" class="product-link">
+                    <div class="product-image">
+                        {% if selected_product['product_images'] %}
+                            <img src="{{ selected_product['product_images'][0] }}" alt="{{ selected_product['product_name'] }}">
+                        {% else %}
+                            <img src="/static/default.jpg" alt="No image available">
+                        {% endif %}
+                        {% if selected_tracking and selected_tracking['discount'] > 0 %}
+                            <span class="discount-label">Giảm {{ "{:.0f}".format((selected_tracking['discount'] / selected_product['product_price']) * 100) }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-info">
+                        <h3>{{ selected_product['product_name'] }}</h3>
+                        <p class="price">{{ "{:,.0f}".format(selected_product['product_price'] - selected_tracking['discount']).replace(',', '.') }} VND</p>
+                        <div class="product-rating">
+                            <p class="rating">{{ selected_tracking['rating_average'] }} (<span class="formatted-review-count">{{ selected_tracking['review_count'] }}</span> reviews)</p>
+                            <p>Đã bán <span class="formatted-quantity-sold">{{ selected_tracking['quantity_sold'] }}</span></p>
+                        </div>
+                        <form class="add-to-cart-form" data-product-id="{{ selected_product['product_id'] }}" method="POST">
+                            <button type="button" class="add-to-cart-btn">Thêm vào giỏ hàng</button>
+                        </form>
+                    </div>
+                </a>
+            {% endif %}
+        </div>
+
+    </section>
+
+    <!-- Sản Phẩm Tương Tự -->
+    <section class="top-rated-products">
+        <h2>Sản Phẩm Tương Tự</h2>
+        <div class="product-grid" id="product-grid">
+            {% for product, tracking in similar_products %}
+            <div class="product-card">
+                <a href="{{ url_for('product', product_id=product['product_id']) }}" class="product-link">
+                    <div class="product-image">
+                        {% if product['product_images'] %}
+                            <img src="{{ product['product_images'][0] }}" alt="{{ product['product_name'] }}">
+                        {% else %}
+                            <img src="/static/default.jpg" alt="No image available">
+                        {% endif %}
+                        {% if tracking['discount'] > 0 %}
+                            <span class="discount-label">Giảm {{ "{:.0f}".format((tracking['discount'] / product['product_price']) * 100) }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-info">
+                        <h3>{{ product['product_name'] }}</h3>
+                        <p class="price">{{ "{:,.0f}".format(product['product_price'] - tracking['discount']).replace(',', '.') }} VND</p>
+                        <div class="product-rating">
+                            <!-- Ensure review_count and rating_average are not None or empty -->
+                            <p class="rating" data-review-count="{{ tracking['review_count'] or 0 }}">
+                                {{ tracking['rating_average'] or 0 }} (<span class="formatted-review-count">{{ tracking['review_count'] or 0 }}</span> reviews)
+                            </p>
+                            <!-- Ensure quantity_sold is not None or empty -->
+                            <p class="sold-count" data-quantity-sold="{{ tracking['quantity_sold'] or 0 }}">
+                                Đã bán <span class="formatted-quantity-sold">{{ tracking['quantity_sold'] or 0 }}</span>
+                            </p>
+                        </div>
+                        <form class="add-to-cart-form" data-product-id="{{ product['product_id'] }}" method="POST">
+                            <button type="button" class="add-to-cart-btn">Thêm vào giỏ hàng</button>
+                        </form>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination (Only for content_based) -->
+        {% if page_route == 'content_based' %}
+        <nav>
+            <ul class="pagination">
+                <!-- Trang trước -->
+                {% if current_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(page_route, product_id=selected_product['product_id'] if selected_product else None, page=current_page-1) }}">Trang trước</a>
+                </li>
+                {% endif %}
+
+                <!-- Hiển thị 3 trang đầu tiên -->
+                {% if current_page > 3 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(page_route, product_id=selected_product['product_id'] if selected_product else None, page=1) }}">1</a>
+                </li>
+                <li class="page-item"><span class="page-link">...</span></li>
+                {% endif %}
+
+                <!-- Hiển thị trang hiện tại và 2 trang kế tiếp/trước -->
+                {% for page in range(start_page, end_page + 1) %}
+                <li class="page-item {{ 'active' if page == current_page else '' }}">
+                    <a class="page-link" href="{{ url_for(page_route, product_id=selected_product['product_id'] if selected_product else None, page=page) }}">{{ page }}</a>
+                </li>
+                {% endfor %}
+
+                <!-- Trang cuối -->
+                {% if current_page < total_pages - 2 %}
+                <li class="page-item"><span class="page-link">...</span></li>
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(page_route, product_id=selected_product['product_id'] if selected_product else None, page=total_pages) }}">{{ total_pages }}</a>
+                </li>
+                {% endif %}
+
+                <!-- Trang tiếp theo -->
+                {% if current_page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(page_route, product_id=selected_product['product_id'] if selected_product else None, page=current_page+1) }}">Trang tiếp theo</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </section>
+
+    <!-- External JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

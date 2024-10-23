@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recommended</title>
+    <link rel="stylesheet" href="/static/next_page.css">
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="/static/product.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- FontAwesome for icons -->
+</head>
+<body>
+    <!-- Include Header -->
+    {% include 'header.html' %}
+
+    <!-- Sản phẩm gợi ý -->
+    <section class="top-rated-products">
+        <h2>Gợi ý sản phẩm
+            <span class="icon-container">
+                <img width="36" height="36" src="https://cdn-icons-png.freepik.com/512/8414/8414804.png" alt="blue-check">
+            </span>
+        </h2>        
+        <div class="product-grid" id="product-grid">
+            {% for product, tracking in products %}
+                {% set is_favourite = favourite_status[product.product_id] %}
+                {% include 'product.html' %}
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        <nav>
+            <ul class="pagination">
+                <!-- Trang trước -->
+                {% if current_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('show_top_rated', page=current_page-1) }}">Trang trước</a>
+                </li>
+                {% endif %}
+
+                <!-- Hiển thị 3 trang đầu tiên -->
+                {% if current_page > 3 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('show_top_rated', page=1) }}">1</a>
+                </li>
+                <li class="page-item">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+
+                <!-- Hiển thị trang hiện tại và 2 trang kế tiếp/trước -->
+                {% for page in range(start_page, end_page + 1) %}
+                <li class="page-item {{ 'active' if page == current_page else '' }}">
+                    <a class="page-link" href="{{ url_for('show_top_rated', page=page) }}">{{ page }}</a>
+                </li>
+                {% endfor %}
+
+                <!-- Hiển thị trang cuối cùng -->
+                {% if current_page < total_pages - 2 %}
+                <li class="page-item">
+                    <span class="page-link">...</span>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('show_top_rated', page=total_pages) }}">{{ total_pages }}</a>
+                </li>
+                {% endif %}
+
+                <!-- Trang tiếp theo -->
+                {% if current_page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('show_top_rated', page=current_page+1) }}">Trang tiếp theo</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </section>
+
+    <!-- External JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

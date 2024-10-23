@@ -1,0 +1,14 @@
+<div class="related-product-card">
+    {% if product.product_images %}
+        <img src="{{ product.product_images[0] }}" alt="{{ product.product_name }}">
+    {% else %}
+        <img src="/static/default.jpg" alt="No Image Available">
+    {% endif %}
+    <h4>{{ product.product_name }}</h4>
+    <p>{{ "{:,.0f}".format(product.product_price).replace(',', '.') }} VND</p>
+    {% if tracking.discount > 0 %}
+        <p class="discount-price">-{{ "{:,.0f}".format(tracking.discount).replace(',', '.') }} VND</p>
+    {% endif %}
+    <p class="product-rating">Rating: {{ tracking.rating_average }} ({{ tracking.review_count }} reviews)</p>
+    <a href="{{ url_for('view_product', product_id=product.product_id) }}" class="view-product-btn">Xem chi tiết</a>
+</div>

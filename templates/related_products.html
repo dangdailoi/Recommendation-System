@@ -1,0 +1,16 @@
+<div class="related-products-section">
+    <h3>Sản phẩm tương tự</h3>
+    <div class="related-products-grid">
+        {% for related_product in related_products %}
+        <div class="related-product-card">
+            {% if related_product.product_images %}
+            <img src="{{ related_product.product_images[0] }}" alt="{{ related_product.product_name }}">
+            {% else %}
+            <img src="/static/default.jpg" alt="No Image Available">
+            {% endif %}
+            <h4>{{ related_product.product_name }}</h4>
+            <p>{{ "{:,.0f}".format(related_product.product_price).replace(',', '.') }} VND</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>

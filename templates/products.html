@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ product.product_name }}</title>
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="/static/products.css">
+    <link rel="stylesheet" href="/static/product.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+    .star-rating {
+        display: inline-flex;
+        position: relative;
+        width: 80px;  /* Điều chỉnh chiều rộng cho 5 ngôi sao */
+        align-items: center;
+        font-size: 0;
+    }
+    .star-rating svg {
+        color: #c7c7c7;  /* Màu xám cho các ngôi sao */
+    }
+    .star-overlay {
+        position: absolute;
+        left: 0;
+        top: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        width: {{ (tracking.rating_average / 5) * 100 }}%;  /* Tính toán tỷ lệ vàng dựa trên rating */
+    }
+    .star-overlay svg {
+        color: #FFC400;  /* Màu vàng cho các ngôi sao */
+    }
+    .rating-section {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        font-size: 14px;
+        color: #555;
+        padding-bottom: 10px;
+    }
+
+    .sold-count, .review-count, .rating-number {
+        margin-left: 5px;
+        font-size: 14px;
+        line-height: 1; /* Đảm bảo các phần tử có cùng chiều cao */
+    }
+
+    .rating-number {
+        font-weight: bold;
+        color: #ff5722;
+    }
+
+    /* Style cho nút favourite */
+    .favourite-btns {
+        background-color: #ff4d4f;
+        color: white;
+        padding: 12px 20px;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        border-radius: 5px;
+        text-align: center;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .favourite-btns:hover {
+        background-color: #e60023;
+    }
+
+    .favourite-btns i {
+        margin-right: 5px;
+    }
+
+    .favourite-btns .fas.fa-heart.favourited {
+        color: red;
+    }
+    </style>
+</head>
+<body>
+    <!-- Include Header -->
+    {% include 'header.html' %}
+    <!-- Main Product Page Container -->
+    <div class="product-page">
+        <!-- Left Section: Product Image and Thumbnails -->
+        <div class="left-section">
+            <!-- Main Product Image -->
+            <div class="product-image-main">
+                <img id="mainImage" src="{{ product.product_images[0] if product.product_images else '/static/default.jpg' }}" alt="{{ product.product_name }}">
+            </div>
+
+            <!-- Thumbnails -->
+            {% if product.product_images and product.product_images|length > 1 %}
+            <div class="thumbnail-container">
+                <div class="product-thumbnails">
+                    {% for img_url in product.product_images %}
+                        <img src="{{ img_url }}" alt="{{ product.product_name }}" class="thumbnail-img" onclick="changeMainImage(this)">
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Product Highlights -->
+            {% if highlight %}
+            <div class="product-highlights">
+                <h4>Đặc điểm nổi bật</h4>
+                <ul>
+                    {% for point in highlight %}
+                        <li><i class="fas fa-circle"></i> {{ point }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Section: Product Details, Price, and Actions -->
+        <div class="right-section">
+            <h1>{{ product.product_name }}</h1>
+            {% set is_favourite = favourite_type[product.product_id] %}
+            <div class="rating-section">
+                <span class="rating-number">{{ "%.1f" % tracking.rating_average }}</span>
+                <div class="star-rating">
+                    <!-- Xám sao mặc định -->
+                    {% for i in range(5) %}
+                        <svg height="16" width="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                        </svg>
+                    {% endfor %}
+                    <!-- Phần overlay sao vàng (dựa trên rating) -->
+                    <div class="star-overlay">
+                        {% for i in range(5) %}
+                            <svg height="16" width="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                                </svg>
+                        {% endfor %}
+                    </div>
+                </div>
+                <span class="review-count" id="review-count">({{ tracking.review_count }})</span>
+                <span class="sold-count" id="sold-count">Đã bán {{ tracking.quantity_sold }}</span>
+            </div>            
+            <!-- Price and Discount -->
+            <div class="product-price">
+                <span class="discounted-price">{{ "{:,.0f}".format(product.product_price * (1 - tracking.discount/100)).replace(',', '.') }} VND</span>
+                {% if tracking.discount > 0 %}
+                <span class="original-price">{{ "{:,.0f}".format(product.product_price).replace(',', '.') }} VND</span>
+                <span class="discount-labels">-{{ "{:,.0f}".format(tracking.discount).replace(',', '.') }}%</span>
+                {% endif %}
+            </div>
+
+            <!-- Quantity Selector -->
+            <div class="quantity-selection">
+                <label for="quantity">Số lượng:</label>
+                <div class="quantity-controls">
+                    <button type="button" class="quantity-btn" onclick="decreaseQuantity()">-</button>
+                    <input type="number" id="quantity" name="quantity" value="1" min="1" max="{{ product.stock }}" required oninput="validateQuantity()">
+                    <button type="button" class="quantity-btn" onclick="increaseQuantity()">+</button>
+                </div>
+            </div>            
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <!-- Buy Now Button -->
+                <form action="{{ url_for('checkout') }}" method="POST">
+                    <input type="hidden" name="product_id" value="{{ product.product_id }}">
+                    <input type="hidden" name="quantity" value="1" id="quantity_input_buy_now">
+                    <button type="submit" class="buy-now-btns">Mua ngay</button>
+                </form>
+
+                <!-- Add to Cart Button -->
+                <form id="add-to-cart-form">
+                    <input type="hidden" name="product_id" value="{{ product.product_id }}">
+                    <input type="hidden" name="quantity" id="quantity_input_cart" value="1">
+                    <button type="button" class="add-to-cart-btns" onclick="addToCart()">Thêm vào giỏ hàng</button>
+                </form>
+
+                <!-- Favourite Button -->
+                <span class="favourite-btns" data-product-id="{{ product.product_id }}" data-is-favourite="{{ 'true' if is_favourite else 'false' }}" onclick="toggleFavourite(this)">
+                    <i class="{{ 'fas fa-heart favourited' if is_favourite else 'far fa-heart' }}"></i>
+                    <span class="favourite-text">
+                        {% if is_favourite %}
+                        Đã thích
+                        {% else %}
+                        Thêm vào mục yêu thích
+                        {% endif %}
+                    </span>
+                </span>                
+            </div>
+            <div id="thankyou-image" style="display: none; text-align: center;">
+                <img src="/static/thanks.jpg" alt="Thank you for adding to cart" style="width: 100%; height: 100%;">
+            </div>
+            <!-- Product Description -->
+            <div class="product-description">
+                <h3>Mô tả sản phẩm</h3>
+                <div id="product-description-content" class="description collapsed">
+                    {{ product.product_description | safe }}
+                </div>
+                <button class="toggle-btn" onclick="toggleDescription()" id="toggle-link">Xem thêm</button>
+            </div>  
+
+            <!-- Similar Products -->
+            <div class="similar-products-section">
+                <h3>Sản phẩm tương tự</h3>
+                <div class="similar-products-grid">
+                    {% for product, tracking in similar_products %}
+                        {% set is_favourite = favourite_status[product.product_id] %}
+                        {% include 'product.html'%}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+    document.getElementById('quantity').addEventListener('input', function() {
+        var quantity = this.value;
+        document.getElementById('quantity_input_buy_now').value = quantity;
+        document.getElementById('quantity_input_cart').value = quantity;
+    });
+    function formatNumber(value) {
+        value = parseFloat(value);
+        if (value >= 1000) {
+            return (value / 1000).toFixed(1).replace('.0', '') + 'k';
+        } else {
+            return value.toFixed(0); // Đảm bảo không có số lẻ khi số < 1000
+        }
+    }
+    document.addEventListener("DOMContentLoaded", function() {
+        var reviewCountElement = document.getElementById("review-count");
+        var reviewCount = parseFloat(reviewCountElement.textContent.match(/\d+/)[0]);  // Lấy số từ chuỗi "({{ tracking.review_count }})"
+        reviewCountElement.textContent = '(' + formatNumber(reviewCount) + ') |';
+    });
+    document.addEventListener("DOMContentLoaded", function() {
+        var soldCountElement = document.getElementById("sold-count");
+        var soldCount = parseFloat(soldCountElement.textContent.match(/\d+/)[0]);  // Lấy số từ chuỗi "Đã bán {{ tracking.quantity_sold }}"
+        soldCountElement.textContent = 'Đã bán ' + formatNumber(soldCount);
+    });
+    function toggleDescription() {
+        var desc = document.getElementById("product-description-content");
+        var link = document.getElementById("toggle-link");
+        if (desc.classList.contains("collapsed")) {
+            desc.classList.remove("collapsed");
+            link.innerHTML = "Thu gọn";
+        } else {
+            desc.classList.add("collapsed");
+            link.innerHTML = "Xem thêm";
+        }
+    }
+    function decreaseQuantity() {
+        var quantityInput = document.getElementById('quantity');
+        var minValue = parseInt(quantityInput.min) || 1;
+        var currentValue = parseInt(quantityInput.value);
+
+        if (isNaN(currentValue) || currentValue <= minValue) {
+            quantityInput.value = minValue;
+        } else {
+            quantityInput.value = currentValue - 1;
+        }
+    }
+
+    function increaseQuantity() {
+        var quantityInput = document.getElementById('quantity');
+        var maxValue = parseInt(quantityInput.max) || 9999;
+        var currentValue = parseInt(quantityInput.value);
+
+        if (isNaN(currentValue)) {
+            quantityInput.value = 1;
+        } else if (currentValue >= maxValue) {
+            quantityInput.value = maxValue;
+        } else {
+            quantityInput.value = currentValue + 1;
+        }
+    }
+
+    function validateQuantity() {
+        var quantityInput = document.getElementById('quantity');
+        var minValue = parseInt(quantityInput.min) || 1;
+        var maxValue = parseInt(quantityInput.max) || 9999;
+        var currentValue = parseInt(quantityInput.value);
+
+        if (isNaN(currentValue) || currentValue < minValue) {
+            quantityInput.value = minValue;
+        } else if (currentValue > maxValue) {
+            quantityInput.value = maxValue;
+        }
+    }
+
+    function addToCart() {
+        const productId = document.querySelector('input[name="product_id"]').value;
+        const quantity = document.getElementById('quantity').value;
+
+        fetch('/add-to-cart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ product_id: productId, quantity: quantity })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hiển thị ảnh thankyou.png
+                document.getElementById('thankyou-image').style.display = 'block';
+
+                // Ẩn ảnh thankyou.png sau 3 giây
+                setTimeout(() => {
+                    document.getElementById('thankyou-image').style.display = 'none';
+                }, 3000);
+
+                // Cập nhật số lượng sản phẩm trong giỏ hàng (nếu có)
+            } else {
+                alert('Không thể thêm sản phẩm vào giỏ hàng');
+            }
+        });
+    }
+
+    function toggleFavourite(element) {
+        const productId = element.getAttribute('data-product-id');
+        const isFavourite = element.getAttribute('data-is-favourite') === 'true';
+        const activityType = isFavourite ? 'unfavourite' : 'favourite';
+
+        fetch('/favourite', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ product_id: productId, activity_type: activityType })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Thay đổi biểu tượng và văn bản
+                const icon = element.querySelector('i');
+                const textElement = element.querySelector('.favourite-text');
+                if (isFavourite) {
+                    icon.classList.remove('fas', 'favourited');
+                    icon.classList.add('far');
+                    element.setAttribute('data-is-favourite', 'false');
+                    textElement.textContent = ' Thêm vào mục yêu thích';
+                } else {
+                    icon.classList.remove('far');
+                    icon.classList.add('fas', 'favourited');
+                    element.setAttribute('data-is-favourite', 'true');
+                    textElement.textContent = ' Đã thích';
+                }
+            } else if (data.error === 'User not logged in') {
+                alert('Vui lòng đăng nhập để sử dụng chức năng này.');
+                window.location.href = '/login';
+            } else {
+                alert(data.error || 'Đã xảy ra lỗi.');
+            }
+        });
+    }
+    </script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

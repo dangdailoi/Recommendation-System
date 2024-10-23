@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product List</title>
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="stylesheet" href="/static/next_page.css">
+    <link rel="stylesheet" href="/static/product.css">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    {% include 'header.html' %}
+    
+    <!-- Recommended Products Section -->
+    <section class="recommended-products">
+        <h2>GỢI Ý CHO BẠN <img width="24" height="24" src="https://cdn-icons-png.flaticon.com/512/9822/9822441.png" alt="blue-check"></h2>
+        <div class="product-grid">
+            {% for product, tracking in recommended_products %}
+                {% set is_favourite = favourite_status_recommended[product.product_id] %}
+                {% include 'product.html' with context %}
+            {% endfor %}
+        </div>
+        <!-- View More Button -->
+        <div class="view-more-container">
+            <a href="{{ url_for('show_recommended', page=1) }}" class="view-more-btn">View More</a>
+        </div>
+    </section>
+
+    <!-- Top-rated Products Section -->
+    <section class="top-rated-products">
+        <h2>SẢN PHẨM BÁN CHẠY <img width="24" height="24" src="https://www.iconpacks.net/icons/1/free-chart-icon-671-thumb.png" alt="blue-check"></h2>
+        <div class="product-grid" id="product-grid">
+            {% for product, tracking in top_rated_products %}
+                {% set is_favourite = favourite_status_top_rated[product.product_id] %}
+                {% include 'product.html' %}
+            {% endfor %}
+        </div>
+        <!-- View More Button -->
+        <div class="view-more-container">
+            <a href="{{ url_for('show_top_rated', page=1) }}" class="view-more-btn">View More</a>
+        </div>
+    </section>
+
+    <!-- External JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

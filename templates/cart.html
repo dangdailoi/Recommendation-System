@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Giỏ hàng của bạn</title>
+    <link rel="stylesheet" href="/static/header.css">
+    <link rel="stylesheet" href="/static/cart.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+
+    <!-- Include Header -->
+    {% include 'header.html' %}
+
+    <!-- Cart Section -->
+    <section class="cart-section">
+        <h1>Giỏ hàng của bạn</h1>
+
+        {% if cart_items %}
+        <table class="cart-table">
+            <thead>
+                <tr>
+                    <th>Sản phẩm</th>
+                    <th>Số lượng</th>
+                    <th>Giá</th>
+                    <th>Tổng</th>
+                    <th>Xóa</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in cart_items %}
+                <tr>
+                    <td class="product-name">
+                        <div class="product-info">
+                            <!-- Ensure the image and product name are available, and use default values if missing -->
+                            <!-- <img src="{{ item['image'] or '/static/default-image.jpg' }}" alt="{{ item['product_name'] or 'Product Image' }}" class="product-image"> -->
+                            <span>{{ item['product_name'] or 'Unnamed Product' }}</span>
+                        </div>
+                    </td>                    
+                    <td>{{ item['quantity'] }}</td>
+                    <td>{{ "{:,.0f}".format(item['price']).replace(',', '.') }} VND</td>
+                    <td>{{ "{:,.0f}".format(item['price']|float * item['quantity']|int).replace(',', '.') }} VND</td>
+                    <td>
+                        <form action="{{ url_for('remove_product_from_cart') }}" method="POST">
+                            <input type="hidden" name="product_id" value="{{ item['product_id'] }}">
+                            <button type="submit" class="remove-btn">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="cart-summary">
+            <p><strong>Tổng cộng: {{ "{:,.0f}".format(total).replace(',', '.') }} VND</strong></p>
+            <a href="{{ url_for('checkout') }}" class="checkout-btn">Thanh toán</a>
+        </div>
+
+        {% else %}
+        <p>Giỏ hàng của bạn trống.</p>
+        {% endif %}
+    </section>
+
+    <!-- External JS -->
+    <script src="/static/script.js"></script>
+</body>
+</html>
