@@ -1,7 +1,6 @@
 # Standard library imports
 import os
 import csv
-import json
 import threading
 import time
 from datetime import datetime
@@ -10,45 +9,42 @@ from datetime import datetime
 import numpy as np
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
-    jsonify, flash, current_app
+    jsonify, flash
 )
+from flask_sqlalchemy import SQLAlchemy
 
 # Local application imports
+from config import Config
 from db.dbo import (
     Product, Tracking, User, Category, ProductCategory,
-    UserActivityLog, ActivityTypeEnum, db
+    UserActivityLog, db
 )
 from search_engine import ImageSearch, TextSearch
 from recommendation_system import DeepContentBasedFiltering, DeepQNetwork
 
 # Create Flask application
 app = Flask(__name__)
-
-# Configuration and constants
-app.secret_key = 'Cam_on_Thay_Hien_Phan'  # Secret key for session management
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:password2@localhost:localhost/database'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.from_object(Config)
 
 # Initialize SQLAlchemy
 db.init_app(app)
 
-# Load configuration from JSON file
-def load_config(config_file_path):
-    with open(config_file_path, 'r') as config_file:
-        return json.load(config_file)
-
-config = load_config('model.json')
-
-# Constants
-MODEL_PATH = config['MODEL_PATH']
-CSV_FILE_PATH = config['CSV_FILE_PATH']
-MODEL_UPDATE_INTERVAL = 120  # Time interval to update DQN model (delta t) in seconds
+# Constants from config
+MODEL_PATH = app.config['MODEL_PATH']
+CSV_FILE_PATH = app.config['CSV_FILE_PATH']
+MODEL_UPDATE_INTERVAL = app.config['MODEL_UPDATE_INTERVAL']
 
 # Ensure CSV file exists and has headers
-if not os.path.exists(CSV_FILE_PATH):
-    with open(CSV_FILE_PATH, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerow(['user_id', 'product_id', 'activity_type', 'timestamp'])
+def ensure_csv_file(csv_file_path):
+    if not os.path.exists(csv_file_path):
+        with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            writer.writerow(['user_id', 'product_id', 'activity_type', 'timestamp'])
+
+ensure_csv_file(CSV_FILE_PATH)
+
+# Activity priority mapping
+ACTIVITY_PRIORITY = {'select': 4, 'favourite': 3, 'view': 2, 'search': 1}
 
 # Initialize search and recommendation engines
 image_search_engine = ImageSearch(config_file_path='model.json')
@@ -56,41 +52,20 @@ text_search_engine = TextSearch()
 content_based_filter = DeepContentBasedFiltering('model.json')
 
 # Initialize DQN agent
-state_size = 10  # State size, can be adjusted
-action_size = 50  # Assume 50 actions (e.g., popular products)
-dqn_agent = DeepQNetwork(state_size=state_size, action_size=action_size)
+STATE_SIZE = 10  # State size, can be adjusted
+ACTION_SIZE = 50  # Assume 50 actions (e.g., popular products)
+dqn_agent = DeepQNetwork(state_size=STATE_SIZE, action_size=ACTION_SIZE)
 
 # Load DQN model if it exists
 dqn_agent.load(MODEL_PATH)
 
 # Helper Functions
-
-def calculate_reward(log):
-    if log.activity_type == ActivityTypeEnum.favourite:
-        return 2
-    elif log.activity_type == ActivityTypeEnum.select:
-        return 3
-    elif log.activity_type == ActivityTypeEnum.remove_from_cart:
-        return -1
-    else:
-        return 1  # Default reward for view action
-
-def calculate_reward_log_type(activity_type):
-    score_mapping = {
-        'favourite': 2,
-        'select': 3,
-        'remove_from_cart': -1,
-        'search': 1,
-        'view': 1
-    }
-    return score_mapping.get(activity_type, 0)
-
 def extract_state_from_db(user_id):
     logs = UserActivityLog.query.filter_by(user_id=user_id).order_by(
         UserActivityLog.view_end_time.desc()
-    ).limit(state_size).all()
+    ).limit(STATE_SIZE).all()
     state = [log.product_id for log in logs]
-    state += [0] * (state_size - len(state))  # Padding if needed
+    state += [0] * (STATE_SIZE - len(state))  # Padding if needed
     return np.array(state)
 
 def log_to_csv(user_id, product_id, activity_type):
@@ -99,7 +74,7 @@ def log_to_csv(user_id, product_id, activity_type):
         writer.writerow([user_id, product_id, activity_type, datetime.now()])
 
 def log_user_activity(user_id, product_id, activity_type, quantity=1, view_end_time=None):
-    valid_activity_types = ['view', 'select', 'purchase', 'remove_from_cart', 'favourite']
+    valid_activity_types = ['view', 'select', 'purchase', 'remove_from_cart', 'favourite', 'search']
     if activity_type not in valid_activity_types:
         raise ValueError(f"Invalid activity type: {activity_type}")
 
@@ -113,7 +88,7 @@ def log_user_activity(user_id, product_id, activity_type, quantity=1, view_end_t
     db.session.add(activity_log)
     db.session.commit()
 
-def favourited(user_id, product_id):
+def is_favourited(user_id, product_id):
     if user_id:
         favourite_entry = UserActivityLog.query.filter_by(
             user_id=user_id, product_id=product_id, activity_type='favourite'
@@ -123,10 +98,11 @@ def favourited(user_id, product_id):
 
 def get_activity_score(activity_type):
     score_mapping = {
-        ActivityTypeEnum.view: 1,
-        ActivityTypeEnum.favourite: 3,
-        ActivityTypeEnum.select: 2,
-        ActivityTypeEnum.remove_from_cart: -1
+        'view': 1,
+        'favourite': 3,
+        'select': 2,
+        'remove_from_cart': -1,
+        'search': 0
     }
     return score_mapping.get(activity_type, 0)
 
@@ -140,44 +116,58 @@ def categorize_product(category_id):
         elif category.parent_category_id == 316:
             return 'book'
         category_id = category.parent_category_id
+    return 'other'
 
 # Background Tasks
-
 def update_dqn_model():
     with app.app_context():
         while True:
-            print("Bắt đầu huấn luyện DQN sau mỗi khoảng thời gian delta t...")
+            print("Starting DQN training at regular intervals...")
 
-            # Get list of user_ids from database
+            # Get list of user_ids from the database
             users = User.query.all()
 
             for user in users:
                 user_id = user.user_id
 
-                # Extract state and train model for each user
+                # Extract the current state for the user
                 state = extract_state_from_db(user_id).reshape(1, -1)
+
+                # Get the latest activity log for the user
+                latest_log = UserActivityLog.query.filter_by(user_id=user_id).order_by(
+                    UserActivityLog.view_end_time.desc()
+                ).first()
+
+                if latest_log:
+                    activity_type = latest_log.activity_type
+                    reward = get_activity_score(activity_type)
+                else:
+                    # Assign a default reward if no activity is found
+                    reward = 0
+
+                # Agent selects an action based on the current state
                 action = dqn_agent.act(state)
-                reward = calculate_reward_log_type('some_activity')
+
+                # Simulate the next state
                 next_state = extract_state_from_db(user_id).reshape(1, -1)
 
                 done = False  # Define end condition if necessary
 
-                # Train DQN model
+                # Train the DQN model
                 dqn_agent.remember(state, action, reward, next_state, done)
                 dqn_agent.replay()
 
-            # Save model after training
+            # Save the model after training
             dqn_agent.save(MODEL_PATH)
-            print(f"Mô hình DQN đã được cập nhật và lưu tại {MODEL_PATH}")
+            print(f"DQN model has been updated and saved at {MODEL_PATH}")
 
-            # Wait for delta t before next training
+            # Wait for the specified interval before the next training session
             time.sleep(MODEL_UPDATE_INTERVAL)
 
 # Start background thread to update model
 threading.Thread(target=update_dqn_model, daemon=True).start()
 
 # Authentication Routes
-
 @app.route('/login', methods=['GET', 'POST'])
 def login_user():
     if request.method == 'POST':
@@ -203,10 +193,82 @@ def logout_user():
     return redirect(url_for('login_user'))
 
 # Home Page
-
 @app.route('/')
 def index():
     return redirect(url_for('home'))
+
+def get_recommendations(user_id, limit=None):
+    # Fetch activity logs from CSV
+    activity_logs = []
+
+    if os.path.exists(CSV_FILE_PATH) and os.path.getsize(CSV_FILE_PATH) > 0:
+        with open(CSV_FILE_PATH, mode='r', newline='', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            next(reader, None)  # Skip header
+            for row in reader:
+                if row[0] == str(user_id):
+                    activity_logs.append({
+                        'product_id': int(row[1]),
+                        'activity_type': row[2],
+                        'datetime': row[3]
+                    })
+
+    if not activity_logs:
+        return []
+
+    # Sort activity_logs by priority and time
+    activity_logs.sort(
+        key=lambda log: (ACTIVITY_PRIORITY.get(log['activity_type'], 99), log['datetime']),
+        reverse=True
+    )
+
+    # Get product_ids from activities
+    interacted_product_ids = [log['product_id'] for log in activity_logs]
+
+    # DQN Recommendations
+    dqn_recommended_ids = []
+    state = extract_state_from_db(user_id).reshape(1, -1)
+    action = dqn_agent.act(state)
+    if interacted_product_ids:
+        selected_product_id = interacted_product_ids[action % len(interacted_product_ids)]
+        dqn_recommended_ids.append(selected_product_id)
+
+    # Get similar products
+    similar_product_ids = []
+    for product_id in interacted_product_ids:
+        product_category = ProductCategory.query.filter_by(product_id=product_id).first()
+        if product_category:
+            category_type = categorize_product(product_category.category_id)
+            similar_ids = content_based_filter.recommend(
+                product_id=product_id,
+                product_type=category_type,
+                top_k=5,
+                exclude_viewed=False
+            )
+            similar_product_ids.extend(similar_ids)
+
+    # Remove duplicates and limit number of products
+    all_recommended_ids = list(dict.fromkeys(
+        interacted_product_ids + dqn_recommended_ids + similar_product_ids
+    ))
+    if limit:
+        all_recommended_ids = all_recommended_ids[:limit]
+
+    # Query products from the database
+    recommended_products_with_tracking = (
+        db.session.query(Product, Tracking)
+        .join(Tracking, Tracking.product_id == Product.product_id)
+        .filter(Product.product_id.in_(all_recommended_ids))
+        .all()
+    )
+
+    # Sort products according to order in all_recommended_ids
+    product_order_map = {pid: idx for idx, pid in enumerate(all_recommended_ids)}
+    recommended_products_with_tracking.sort(
+        key=lambda x: product_order_map.get(x[0].product_id, len(all_recommended_ids))
+    )
+
+    return recommended_products_with_tracking
 
 @app.route('/home')
 def home():
@@ -215,88 +277,8 @@ def home():
 
     user_id = session.get('user_id')
 
-    # Get user's interaction history
-    activity_logs = UserActivityLog.query.filter_by(
-        user_id=user_id
-    ).order_by(UserActivityLog.view_end_time.desc()).limit(5).all()
-
-    favorite_products = [
-        log.product_id for log in activity_logs if log.activity_type == ActivityTypeEnum.favourite
-    ]
-    viewed_products = [
-        log.product_id for log in activity_logs
-        if log.activity_type == ActivityTypeEnum.view and log.product_id not in favorite_products
-    ]
-
-    # Combine product IDs for recommendation
-    product_ids_for_recommendation = favorite_products + viewed_products[:max(0, 5 - len(favorite_products))]
-
-    recommended_product_ids = []
-
-    # Get recommendations from DQN based on state
-    state = extract_state_from_db(user_id).reshape(1, -1)
-    action = dqn_agent.act(state)
-
-    # Assume action is index in product_ids_for_recommendation
-    if product_ids_for_recommendation:
-        selected_product_id = product_ids_for_recommendation[action % len(product_ids_for_recommendation)]
-        # Get similar products using content-based filter
-        product_category = ProductCategory.query.filter_by(product_id=selected_product_id).first()
-        if product_category:
-            category_type = categorize_product(product_category.category_id)
-            similar_ids = content_based_filter.recommend(
-                product_id=selected_product_id,
-                product_type=category_type,
-                top_k=3,
-                exclude_viewed=True,
-                viewed_product_ids=[
-                    log.product_id for log in activity_logs if log.activity_type == ActivityTypeEnum.view
-                ]
-            )
-            recommended_product_ids.extend(similar_ids)
-
-    # Recommend 3 similar products for viewed products
-    for product_id in viewed_products[:3]:
-        product_category = ProductCategory.query.filter_by(product_id=product_id).first()
-        if product_category:
-            category_type = categorize_product(product_category.category_id)
-            similar_ids = content_based_filter.recommend(
-                product_id=product_id,
-                product_type=category_type,
-                top_k=3,
-                exclude_viewed=True,
-                viewed_product_ids=[
-                    log.product_id for log in activity_logs if log.activity_type == ActivityTypeEnum.view
-                ]
-            )
-            recommended_product_ids.extend(similar_ids)
-
-    # Recommend 3 similar products for favourite products
-    for product_id in favorite_products[:3]:
-        product_category = ProductCategory.query.filter_by(product_id=product_id).first()
-        if product_category:
-            category_type = categorize_product(product_category.category_id)
-            similar_ids = content_based_filter.recommend(
-                product_id=product_id,
-                product_type=category_type,
-                top_k=3,
-                exclude_viewed=True,
-                viewed_product_ids=[
-                    log.product_id for log in activity_logs if log.activity_type == ActivityTypeEnum.view
-                ]
-            )
-            recommended_product_ids.extend(similar_ids)
-
-    # Remove duplicates and limit recommendations
-    recommended_product_ids = list(dict.fromkeys(recommended_product_ids))[:9]
-
-    # Get recommended products from database
-    recommended_products = (
-        db.session.query(Product, Tracking)
-        .join(Tracking, Tracking.product_id == Product.product_id)
-        .filter(Product.product_id.in_(recommended_product_ids))
-        .all()
-    )
+    # Get recommended products
+    recommended_products_with_tracking = get_recommendations(user_id, limit=16)
 
     # Get top-rated products
     top_rated_products = (
@@ -309,11 +291,11 @@ def home():
 
     # Favourite status
     favourite_status_recommended = {
-        product.Product.product_id: favourited(user_id, product.Product.product_id)
-        for product in recommended_products
+        product.Product.product_id: is_favourited(user_id, product.Product.product_id)
+        for product in recommended_products_with_tracking
     }
     favourite_status_top_rated = {
-        product.Product.product_id: favourited(user_id, product.Product.product_id)
+        product.Product.product_id: is_favourited(user_id, product.Product.product_id)
         for product in top_rated_products
     }
 
@@ -322,7 +304,7 @@ def home():
 
     return render_template(
         'home.html',
-        recommended_products=recommended_products,
+        recommended_products=recommended_products_with_tracking,
         top_rated_products=top_rated_products,
         favourite_status_recommended=favourite_status_recommended,
         favourite_status_top_rated=favourite_status_top_rated,
@@ -331,7 +313,6 @@ def home():
     )
 
 # Product Browsing Routes
-
 @app.route('/top-rated/<int:page>')
 def show_top_rated(page=1):
     user_id = session.get('user_id')
@@ -349,7 +330,7 @@ def show_top_rated(page=1):
     )
 
     favourite_status_top_rated = {
-        product.Product.product_id: favourited(user_id, product.Product.product_id)
+        product.Product.product_id: is_favourited(user_id, product.Product.product_id)
         for product in top_rated_products
     }
 
@@ -373,7 +354,6 @@ def show_top_rated(page=1):
     )
 
 # Product Details Routes
-
 @app.route('/product/<int:product_id>', methods=['GET', 'POST'])
 def view_product(product_id):
     # Log 'view' activity when the product page is viewed
@@ -384,8 +364,9 @@ def view_product(product_id):
 
     product = Product.query.get_or_404(product_id)
     tracking = Tracking.query.filter_by(product_id=product_id).first_or_404()
-    favourite_type = {product.product_id: favourited(user_id, product.product_id)}
+    favourite_status = is_favourited(user_id, product.product_id)
 
+    # Get similar products
     product_category = ProductCategory.query.filter_by(product_id=product_id).first()
     category_type = categorize_product(product_category.category_id)
     similar_ids = content_based_filter.recommend(
@@ -393,7 +374,8 @@ def view_product(product_id):
         product_type=category_type,
         top_k=9,
         exclude_viewed=True,
-        viewed_product_ids=None
+        viewed_product_ids=None,
+        content_based=True
     )
     similar_products = Product.query.filter(
         Product.product_id.in_(similar_ids)
@@ -407,10 +389,11 @@ def view_product(product_id):
     products_with_tracking = [
         (product, tracking_data.get(product.product_id)) for product in similar_products
     ]
-    favourite_status_top_rated = {
-        product.product_id: favourited(user_id, product.product_id)
+    favourite_status_similar = {
+        product.product_id: is_favourited(user_id, product.product_id)
         for product, tracking in products_with_tracking
     }
+
     highlight = (
         product.product_highlights.split(',')
         if isinstance(product.product_highlights, str)
@@ -452,15 +435,14 @@ def view_product(product_id):
         'products.html',
         cart_count=cart_count,
         product=product,
-        favourite_type=favourite_type,
+        favourite_status=favourite_status,
         tracking=tracking,
         highlight=highlight,
         similar_products=products_with_tracking,
-        favourite_status=favourite_status_top_rated
+        favourite_status_similar=favourite_status_similar
     )
 
 # Cart and Checkout Routes
-
 @app.route('/add-to-cart', methods=['POST'])
 def add_product_to_cart():
     data = request.get_json()
@@ -511,18 +493,9 @@ def view_cart():
         else:
             grouped_cart_items[key] = item
 
-    # Ensure price is properly formatted and converted to float
-    def clean_price(price):
-        try:
-            return float(str(price).replace(',', '').replace('VND', '').strip())
-        except ValueError:
-            return 0.0
-
-    total = 0.0
-    for item in grouped_cart_items.values():
-        price = clean_price(item['price'])
-        quantity = int(item.get('quantity', 1))
-        total += price * quantity
+    total = sum(
+        float(item['price']) * item['quantity'] for item in grouped_cart_items.values()
+    )
 
     return render_template('cart.html', cart_items=grouped_cart_items.values(), total=total)
 
@@ -552,15 +525,12 @@ def remove_product_from_cart():
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
     if request.method == 'POST':
-        product_id = request.form.get('product_id')
-        quantity = int(request.form.get('quantity', 1))
         # Process payment or add product to order
         return redirect("https://dailoi-ddl.glitch.me/")
     else:
         return redirect("https://dailoi-ddl.glitch.me/")
 
 # Search Routes
-
 @app.route('/search-by-text')
 def search_by_text():
     query_str = request.args.get('query', '')
@@ -568,33 +538,28 @@ def search_by_text():
     per_page = 24
 
     if query_str:
-        # Get search history from the session
+        # Get search history from session and manage duplicates
         search_history = session.setdefault('search_history', [])
-
         if query_str not in search_history:
             search_history.insert(0, query_str)
-
-        # Keep only the 5 most recent unique search terms
-        session['search_history'] = search_history[:5]
+        session['search_history'] = search_history[:5]  # Keep only the 5 most recent terms
 
         # Proceed with search logic
         results = text_search_engine.search(query_str)
 
-        formatted_results = [
-            (
-                Product.query.filter_by(product_id=product_id).first(),
-                Tracking.query.filter_by(product_id=product_id).first()
-            )
-            for product_id, _, _, _, _ in results
-            if Product.query.filter_by(product_id=product_id).first() and
-            Tracking.query.filter_by(product_id=product_id).first()
-        ]
+        formatted_results = []
+        for product_id, _, _, _, _ in results:
+            product = Product.query.filter_by(product_id=product_id).first()
+            tracking = Tracking.query.filter_by(product_id=product_id).first()
+            if product and tracking:
+                formatted_results.append((product, tracking))
 
-        # Log first 3 product_ids to CSV when searching
+        # Log the first result if user is logged in
         if 'user_id' in session:
             user_id = session.get('user_id')
-            for product, _ in formatted_results[:3]:
+            for product, _ in formatted_results[:1]:
                 log_to_csv(user_id, product.product_id, 'search')
+                log_user_activity(user_id, product.product_id, 'search', quantity=1)
 
         total_products = len(formatted_results)
         total_pages = (total_products + per_page - 1) // per_page
@@ -633,19 +598,17 @@ def search_by_image():
         similar_ids = image_search_engine.upload_and_search(file_path)
         uploaded_image_filename = uploaded_file.filename
 
-        # Log first product_id to CSV when searching by image
+        # Log first product_id to CSV and database
         if 'user_id' in session and similar_ids:
             user_id = session.get('user_id')
             log_to_csv(user_id, similar_ids[0], 'search')
+            log_user_activity(user_id, similar_ids[0], 'search', quantity=1)
+
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
-    similar_products = Product.query.filter(
-        Product.product_id.in_(similar_ids)
-    ).all()
-    tracking_data = Tracking.query.filter(
-        Tracking.product_id.in_(similar_ids)
-    ).all()
+    similar_products = Product.query.filter(Product.product_id.in_(similar_ids)).all()
+    tracking_data = Tracking.query.filter(Tracking.product_id.in_(similar_ids)).all()
 
     cart_count = len(session.get('cart', []))
     search_history = session.get('search_history', [])
@@ -659,10 +622,7 @@ def search_by_image():
     )
 
 # Recommendation Routes
-
-import os
-
-@app.route('/recommended/<int:page>')
+@app.route('/show_recommended/<int:page>')
 def show_recommended(page=1):
     user_id = session.get('user_id')
     if not user_id:
@@ -671,80 +631,16 @@ def show_recommended(page=1):
     per_page = 48
     start = (page - 1) * per_page
 
-    activity_logs = []
-
-    # Check if the CSV file exists and is not empty
-    if os.path.exists(CSV_FILE_PATH) and os.path.getsize(CSV_FILE_PATH) > 0:
-        with open(CSV_FILE_PATH, mode='r', newline='', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            try:
-                next(reader)  # Skip header
-            except StopIteration:
-                pass  # CSV file is empty after header
-            else:
-                for row in reader:
-                    if row[0] == str(user_id):
-                        activity_logs.append((int(row[1]), row[2]))  # (product_id, activity_type)
-    else:
-        # CSV file does not exist or is empty
-        pass  # activity_logs remains empty
-
-    # Prioritize group 1: select, favourite, view, search
-    select_products = [log[0] for log in activity_logs if log[1] == 'select']
-    favourite_products = [log[0] for log in activity_logs if log[1] == 'favourite']
-    view_products = [log[0] for log in activity_logs if log[1] == 'view']
-    search_products = [log[0] for log in activity_logs if log[1] == 'search']
-
-    # Combine product_ids for group 1 in order of priority
-    interacted_product_ids = select_products + favourite_products + view_products + search_products
-
-    # Get recommendations from DQN (Group 2)
-    dqn_recommended_ids = []
-    state = extract_state_from_db(user_id).reshape(1, -1)
-    action = dqn_agent.act(state)
-
-    if interacted_product_ids:
-        selected_product_id = interacted_product_ids[action % len(interacted_product_ids)]
-        dqn_recommended_ids.append(selected_product_id)
-
-    # Get similar products to those in group 1 (Group 3)
-    similar_product_ids = []
-    for product_id in interacted_product_ids:
-        product_category = ProductCategory.query.filter_by(product_id=product_id).first()
-        if product_category:
-            category_type = categorize_product(product_category.category_id)
-            similar_ids = content_based_filter.recommend(
-                product_id=product_id,
-                product_type=category_type,
-                top_k=15,  # Adjust as needed
-                exclude_viewed=False
-            )
-            similar_product_ids.extend(similar_ids)
-
-    # Remove duplicates between groups
-    dqn_recommended_ids = list(dict.fromkeys(dqn_recommended_ids))
-    similar_product_ids = list(dict.fromkeys(similar_product_ids))
-
-    # Combine all product_ids
-    all_recommended_ids = list(dict.fromkeys(
-        interacted_product_ids + dqn_recommended_ids + similar_product_ids
-    ))
-
-    # Get products from database
-    recommended_products_with_tracking = (
-        db.session.query(Product, Tracking)
-        .join(Tracking, Tracking.product_id == Product.product_id)
-        .filter(Product.product_id.in_(all_recommended_ids))
-        .all()
-    )
+    recommended_products_with_tracking = get_recommendations(user_id)
 
     # Pagination
     total_products = len(recommended_products_with_tracking)
     total_pages = (total_products + per_page - 1) // per_page
     paginated_products = recommended_products_with_tracking[start:start + per_page]
 
+    # Favourite status
     favourite_status = {
-        product.Product.product_id: favourited(user_id, product.Product.product_id)
+        product.Product.product_id: is_favourited(user_id, product.Product.product_id)
         for product in paginated_products
     }
 
@@ -780,7 +676,8 @@ def content_based_recommendations(product_id, page=1):
         product_type=category_type,
         top_k=10,
         exclude_viewed=True,
-        viewed_product_ids=None
+        viewed_product_ids=None,
+        content_based=True
     )
 
     similar_products = Product.query.filter(
@@ -811,7 +708,6 @@ def content_based_recommendations(product_id, page=1):
     )
 
 # Product Interaction Routes
-
 @app.route('/favourite', methods=['POST'])
 def favourite_route():
     data = request.get_json()
